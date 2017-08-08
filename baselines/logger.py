@@ -120,7 +120,7 @@ class TensorBoardOutputFormat(OutputFormat):
             return self.tf.Summary.Value(**kwargs)
         summary = self.tf.Summary(value=[summary_val(k, v) for k, v in kvs.items()])
         event = self.event_pb2.Event(wall_time=time.time(), summary=summary)
-        event.step = self.step # is there any reason why you'd want to specify the step?
+        event.step = self.step  # is there any reason why you'd want to specify the step?
         self.writer.WriteEvent(event)
         self.writer.Flush()
         self.step += 1
@@ -288,9 +288,9 @@ class session(object):
 
     def __enter__(self):
         os.makedirs(self.evaluation_dir(), exist_ok=True)
-        output_formats = [make_output_format(f, self.evaluation_dir()) 
-                            for f in LOG_OUTPUT_FORMATS]
-        Logger.CURRENT = Logger(dir=self.dir, output_formats=output_formats)
+        # output_formats = [make_output_format(f, self.evaluation_dir())
+        #                     for f in LOG_OUTPUT_FORMATS]
+        # Logger.CURRENT = Logger(dir=self.dir, output_formats=output_formats)
         os.environ['OPENAI_LOGDIR'] = self.evaluation_dir()
 
     def __exit__(self, *args):

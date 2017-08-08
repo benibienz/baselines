@@ -9,7 +9,7 @@ import sys
 def train(env_id, num_eps, seed):
     from baselines.pposgd import mlp_policy, pposgd_simple
     U.make_session(num_cpu=1).__enter__()
-    logger.session().__enter__()
+    logger.session(dir='logs', format_strs=['stdout', 'tensorboard']).__enter__()
     set_global_seeds(seed)
     env = gym.make(env_id)
     def policy_fn(name, ob_space, ac_space):
@@ -19,10 +19,10 @@ def train(env_id, num_eps, seed):
     env.seed(seed)
     gym.logger.setLevel(logging.WARN)
     pi = pposgd_simple.learn(env, policy_fn,
-            max_episodes=num_eps,
-            timesteps_per_batch=2048,
-            clip_param=0.2, entcoeff=0.0,
-            optim_epochs=10, optim_stepsize=3e-4, optim_batchsize=64,
+            max_timesteps=1e6,
+            timesteps_per_batch=512,
+            clip_param=0.2, entcoeff=0,
+            optim_epochs=15, optim_stepsize=3e-4, optim_batchsize=256,
             gamma=0.99, lam=0.95
         )
     input()
@@ -41,7 +41,7 @@ def play(env, num_runs, policy_fn):
 
 
 def main():
-    train('RoboschoolInvertedPendulumSwingup-v1', num_eps=2000, seed=0)
+    train('RoboschoolHumanoid-v1', num_eps=3000, seed=0)
 
 
 if __name__ == '__main__':
