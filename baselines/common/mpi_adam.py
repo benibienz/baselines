@@ -40,7 +40,7 @@ class MpiAdam(object):
         self.setfromflat(theta)
 
     def check_synced(self):
-        if self.comm.Get_rank() == 0: # this is root
+        if self.comm.Get_rank() == 0:  # this is root
             theta = self.getflat()
             self.comm.Bcast(theta, root=0)
         else:
@@ -64,7 +64,7 @@ def test_MpiAdam():
 
     tf.get_default_session().run(tf.global_variables_initializer())
     for i in range(10):
-        print(i,do_update())
+        print(i, do_update())
 
     tf.set_random_seed(0)
     tf.get_default_session().run(tf.global_variables_initializer())

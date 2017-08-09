@@ -231,6 +231,8 @@ def learn(env, policy_func, *,
             surrbefore = lossbefore[0]
             stepsize = 1.0
             thbefore = get_flat()
+
+            # stepsize check
             for _ in range(10):
                 thnew = thbefore + fullstep * stepsize
                 set_from_flat(thnew)
@@ -250,8 +252,10 @@ def learn(env, policy_func, *,
             else:
                 logger.log("couldn't compute a good step")
                 set_from_flat(thbefore)
+
+            # check param update is the same for all workers
             if nworkers > 1 and iters_so_far % 20 == 0:
-                paramsums = MPI.COMM_WORLD.allgather((thnew.sum(), vfadam.getflat().sum())) # list of tuples
+                paramsums = MPI.COMM_WORLD.allgather((thnew.sum(), vfadam.getflat().sum()))  # list of tuples
                 assert all(np.allclose(ps, paramsums[0]) for ps in paramsums[1:])
 
         for (lossname, lossval) in zip(loss_names, meanlosses):
@@ -286,6 +290,8 @@ def learn(env, policy_func, *,
 
         if rank==0:
             logger.dump_tabular()
+
+    return pi
 
 def flatten_lists(listoflists):
     return [el for list_ in listoflists for el in list_]
