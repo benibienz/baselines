@@ -1,10 +1,12 @@
-__all__ = ['Monitor', 'get_monitor_files', 'load_results']
+__all__ = ['Monitor', 'get_monitor_files', 'load_results', 'DynamicsLogger']
 
 import gym
 from gym.core import Wrapper
+import os
 from os import path
 import time
 from glob import glob
+import csv
 
 try:
     import ujson as json # Not necessary for monitor writing, but very useful for monitor loading
@@ -37,6 +39,8 @@ class Monitor(Wrapper):
         self.current_metadata = {} # extra info that gets injected into each log entry
         # Useful for metalearning where we're modifying the environment externally
         # But want our logs to know about these modifications
+        self.dylog = None
+        self.dylogpath = path.dirname(filename)
 
     def __getstate__(self): # XXX
         d = self.__dict__.copy()
@@ -58,13 +62,18 @@ class Monitor(Wrapper):
             self.f.truncate()        
             self.logger = JSONLogger(self.f)
 
+    def init_dynamics_logger(self, overwrite=False, rank=None):
+        self.dylog = DynamicsLogger(self.dylogpath, overwrite=overwrite, rank=rank)
 
     def reset(self):
         if not self.allow_early_resets and not self.needs_reset:
             raise RuntimeError("Tried to reset an environment before done. If you want to allow early resets, wrap your env with Monitor(env, path, allow_early_resets=True)")
         self.rewards = []
         self.needs_reset = False
-        return self.env.reset()
+        reset_state = self.env.reset()
+        if self.dylog is not None:
+            self.dylog.reset_state(reset_state)
+        return reset_state
 
     def step(self, action):
         if self.needs_reset:
@@ -83,6 +92,9 @@ class Monitor(Wrapper):
             self.episode_lengths.append(eplen)
             info['episode'] = epinfo
         self.total_steps += 1
+        if self.dylog is not None:
+            self.dylog.log_transition(action, ob, rew, done)
+
         return (ob, rew, done, info)
 
     def close(self):
@@ -144,3 +156,64 @@ def load_results(dir):
         'episode_rewards': [e['r'] for e in episodes],
         'initial_reset_time': min([min(header['t_start'] for header in headers)])
     }
+
+class DynamicsLogger():
+    # Logs state dynamics for model building
+
+    def __init__(self, logdir, overwrite=True, rank=None):
+        # hacky mpi fix
+        filename = 'transitions.csv' if rank is None else 'transitions{}.csv'.format(rank)
+        if not logdir.endswith(filename):
+            self.filepath = path.join(logdir, filename)
+        self.transitions = []
+        # self.transitions_copy = []
+        self.transition_count = 0
+        self.prev_state = None
+        if not path.isfile(self.filepath) or overwrite:
+            self.file = open(self.filepath, 'w')
+        else:
+            self.file = open(self.filepath, 'a')
+
+        self.writer = csv.writer(self.file)
+
+    def log_transition(self, ac, state, rew, done):
+        self.transition_count += 1
+        if self.prev_state is None:
+            raise NoResetError('Must call reset_state() before logging transition')
+        self.transitions.append((self.prev_state, ac, rew, done))
+        if not done:
+            self.prev_state = state
+        else:
+            self.prev_state = None
+            self._save_log()
+
+    def reset_state(self, init_state):
+        self.prev_state = init_state
+
+    def delete_logs(self):
+        os.remove(self.filepath)
+
+    def load_logs(self):
+        if self.transition_count > 0:
+            raise LoggerModeError('Use different DynamicsLogger instances for saving and loading modes')
+        reader = csv.reader(self.file)
+        for row in reader:
+            state = [float(s) for s in row[0][1:-1].split()]
+            ac = [float(s) for s in row[1][1:-1].split()]
+            rew = float(row[2])
+            done = row[3] == 'True'
+            self.transitions.append((state, ac, rew, done))
+
+    def _save_log(self):
+        for i in range(self.transition_count):
+            self.writer.writerow(self.transitions[i])
+        # self.transitions_copy += self.transitions
+        self.transitions = []
+        self.transition_count = 0
+
+class NoResetError(Exception):
+    pass
+
+class LoggerModeError(Exception):
+    pass
+

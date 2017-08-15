@@ -9,7 +9,9 @@ from baselines.common.mpi_fork import mpi_fork
 from baselines.pposgd import mlp_policy, pposgd_simple, pposgd_mpi
 import sys
 
+ENV = 'RoboschoolWalker2d-v1'
 NUM_CPU = 8
+LOGDIR = '/Users/beni/PycharmProjects/baselines/baselines/logs/' + ENV
 
 def train(env_id, seed):
 
@@ -18,7 +20,7 @@ def train(env_id, seed):
         return
 
     U.make_session(num_cpu=1).__enter__()
-    logger.session(dir='logs', format_strs=['stdout', 'tensorboard']).__enter__()
+    logger.session(dir=LOGDIR, format_strs=['stdout', 'tensorboard']).__enter__()
     rank = MPI.COMM_WORLD.Get_rank()
     if rank != 0:
         logger.set_level(logger.DISABLED)
@@ -29,18 +31,19 @@ def train(env_id, seed):
         return mlp_policy.MlpPolicy(name=name, ob_space=ob_space, ac_space=ac_space,
             hid_size=64, num_hid_layers=2)
     env = bench.Monitor(env, osp.join(logger.get_dir(), "monitor.json"), allow_early_resets=True)
+    env.init_dynamics_logger(overwrite=True, rank=rank)
     env.seed(seed)
     gym.logger.setLevel(logging.WARN)
     pi = pposgd_mpi.learn(env, policy_fn,
-            max_timesteps=1e6,
-            timesteps_per_batch=512,
+            max_timesteps=2e6,
+            timesteps_per_batch=256,
             clip_param=0.2, entcoeff=0,
-            optim_epochs=15, optim_stepsize=2e-4, optim_batchsize=64,
+            optim_epochs=5, optim_stepsize=4e-4, optim_batchsize=8,
             gamma=0.99, lam=0.95
         )
-    if rank == 0:
-        input()
-        play(env, 10, pi)
+    # if rank == 0:
+    #     input()
+    #     play(env, 10, pi)
     env.close()
 
 def play(env, num_runs, policy_fn):
@@ -55,9 +58,21 @@ def play(env, num_runs, policy_fn):
 
 
 def main():
-    train('RoboschoolHumanoid-v1', seed=0)
+    train(ENV, seed=0)
 
 
 if __name__ == '__main__':
     main()
     # bench.load_results('logs')
+    ''' RoboschoolInvertedPendulum-v0
+        RoboschoolInvertedPendulumSwingup-v0
+        RoboschoolInvertedDoublePendulum-v0
+        RoboschoolReacher-v0
+        RoboschoolHopper-v0
+        RoboschoolWalker2d-v0
+        RoboschoolHalfCheetah-v0
+        RoboschoolAnt-v0
+        RoboschoolHumanoid-v0
+        RoboschoolHumanoidFlagrun-v0
+        RoboschoolHumanoidFlagrunHarder-v0
+        RoboschoolPong-v0'''
