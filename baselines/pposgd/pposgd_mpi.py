@@ -226,6 +226,9 @@ def learn(env, policy_func, *,
         if MPI.COMM_WORLD.Get_rank() == 0:
             logger.dump_tabular()
 
+        if iters_so_far % 1 == 0:
+            env.dylog.save_log()
+
     return pi
 
 

@@ -95,7 +95,7 @@ class Monitor(Wrapper):
         if self.dylog is not None:
             self.dylog.log_transition(action, ob, rew, done)
 
-        return (ob, rew, done, info)
+        return ob, rew, done, info
 
     def close(self):
         if self.f is not None:
@@ -162,12 +162,13 @@ class DynamicsLogger():
 
     def __init__(self, logdir, overwrite=True, rank=None):
         # hacky mpi fix
-        filename = 'transitions.csv' if rank is None else 'transitions{}.csv'.format(rank)
+        self.rank = rank
+        self.mpi = True if rank is not None else False
+        filename = 'transitions.csv' if not self.mpi else 'transitions{}.csv'.format(rank)
         if not logdir.endswith(filename):
             self.filepath = path.join(logdir, filename)
         self.transitions = []
         # self.transitions_copy = []
-        self.transition_count = 0
         self.prev_state = None
         if not path.isfile(self.filepath) or overwrite:
             self.file = open(self.filepath, 'w')
@@ -177,7 +178,6 @@ class DynamicsLogger():
         self.writer = csv.writer(self.file)
 
     def log_transition(self, ac, state, rew, done):
-        self.transition_count += 1
         if self.prev_state is None:
             raise NoResetError('Must call reset_state() before logging transition')
         self.transitions.append((self.prev_state, ac, rew, done))
@@ -185,7 +185,6 @@ class DynamicsLogger():
             self.prev_state = state
         else:
             self.prev_state = None
-            self._save_log()
 
     def reset_state(self, init_state):
         self.prev_state = init_state
@@ -194,8 +193,6 @@ class DynamicsLogger():
         os.remove(self.filepath)
 
     def load_logs(self):
-        if self.transition_count > 0:
-            raise LoggerModeError('Use different DynamicsLogger instances for saving and loading modes')
         reader = csv.reader(self.file)
         for row in reader:
             state = [float(s) for s in row[0][1:-1].split()]
@@ -204,16 +201,13 @@ class DynamicsLogger():
             done = row[3] == 'True'
             self.transitions.append((state, ac, rew, done))
 
-    def _save_log(self):
-        for i in range(self.transition_count):
-            self.writer.writerow(self.transitions[i])
+    def save_log(self):
+        # must be called manually
+        for t in range(len(self.transitions)):
+            self.writer.writerow(self.transitions[t])
         # self.transitions_copy += self.transitions
         self.transitions = []
-        self.transition_count = 0
 
 class NoResetError(Exception):
-    pass
-
-class LoggerModeError(Exception):
     pass
 

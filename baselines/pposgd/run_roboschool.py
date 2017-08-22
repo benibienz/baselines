@@ -31,19 +31,19 @@ def train(env_id, seed):
         return mlp_policy.MlpPolicy(name=name, ob_space=ob_space, ac_space=ac_space,
             hid_size=64, num_hid_layers=2)
     env = bench.Monitor(env, osp.join(logger.get_dir(), "monitor.json"), allow_early_resets=True)
-    env.init_dynamics_logger(overwrite=True, rank=rank)
+    env.init_dynamics_logger(overwrite=False, rank=rank)
     env.seed(seed)
     gym.logger.setLevel(logging.WARN)
     pi = pposgd_mpi.learn(env, policy_fn,
             max_timesteps=2e6,
             timesteps_per_batch=256,
             clip_param=0.2, entcoeff=0,
-            optim_epochs=5, optim_stepsize=4e-4, optim_batchsize=8,
+            optim_epochs=5, optim_stepsize=4e-4, optim_batchsize=64,
             gamma=0.99, lam=0.95
         )
-    # if rank == 0:
-    #     input()
-    #     play(env, 10, pi)
+    if rank == 0:
+        input()
+        play(env, 10, pi)
     env.close()
 
 def play(env, num_runs, policy_fn):
